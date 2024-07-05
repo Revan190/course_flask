@@ -1,52 +1,40 @@
-# app.py
-
 from flask import Flask, jsonify, request
 from models.sqlalchemy.models import Animal, db
 from photo_fetcher import fetch_dog_photo, fetch_cat_photo
-from settings import settings
-from database import init_db
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = settings.sqlalchemy_database_uri
 
-db = init_db(app)
-
-# Health Check Endpoint
 @app.route('/health', methods=['GET'])
 def health_check():
-    return 'OK', 200
+    # Simple health check endpoint
+    return jsonify({'status': 'healthy'}), 200
 
-# Create Animal Endpoint
-@app.route('/animal', methods=['POST'])
-def create_animal():
-    animal_data = request.get_json()
-    photo_url = None
-
-    if animal_data['type'].lower() == 'dog':
-        photo_url = fetch_dog_photo()
-    elif animal_data['type'].lower() == 'cat':
-        photo_url = fetch_cat_photo()
-
-    if photo_url:
+@app.route('/animal', methods=['GET', 'POST'])
+def animal():
+    if request.method == 'GET':
+        # Fetch all animals from the database
+        animals = Animal.query.all()
+        return jsonify([animal.to_dict() for animal in animals])
+    elif request.method == 'POST':
+        # Add a new animal to the database
+        data = request.get_json()
         new_animal = Animal(
-            name=animal_data['name'],
-            type=animal_data['type'],
-            breed=animal_data.get('breed', 'Unknown'),  # Optional field with default value
-            photo_url=photo_url
+            name=data['name'],
+            species=data['species'],
+            age=data['age'],
+            breed=data['breed']
         )
+        # Fetch photo URL based on the breed
+        if new_animal.species.lower() == 'dog':
+            new_animal.photo_url = fetch_dog_photo(new_animal.breed)
+        elif new_animal.species.lower() == 'cat':
+            new_animal.photo_url = fetch_cat_photo(new_animal.breed)
+        
         db.session.add(new_animal)
         db.session.commit()
         return jsonify(new_animal.to_dict()), 201
-    else:
-        return jsonify({"error": "Could not fetch photo"}), 500
 
-# Update Animal Endpoint
-@app.route('/animal/<int:animal_id>', methods=['PUT'])
-def update_animal(animal_id):
-    # Your logic to update an animal record with the new fields
-    pass
-
-# ... other routes ...
+# ... rest of the file ...
 
 if __name__ == '__main__':
     app.run(debug=True)
